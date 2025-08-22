@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useToast } from "@/components/ui/use-toast"
 import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
@@ -31,6 +32,7 @@ import {
   Eye,
   UserPlus,
   Download,
+  ClipboardList,
 } from "lucide-react"
 
 const users = [
@@ -111,6 +113,51 @@ export default function AdminInterface() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterRole, setFilterRole] = useState("all")
   const [filterStatus, setFilterStatus] = useState("all")
+  const { toast } = useToast()
+
+  // Role Management UI state
+  const [manageUserId, setManageUserId] = useState<string>("")
+  const [manageRole, setManageRole] = useState<string>("")
+  const [manageOpen, setManageOpen] = useState(false)
+  const [currentRoles, setCurrentRoles] = useState<string[]>([])
+  const [loadingRoles, setLoadingRoles] = useState(false)
+
+  const roleOptions = [
+    "Admin",
+    "Sales",
+    "Ops",
+    "Finance",
+    "Sales Representative",
+    "Stock Keeper",
+  ]
+
+  // Load roles for selected user when dialog opens
+  useEffect(() => {
+    const load = async () => {
+      if (!manageOpen || !manageUserId) return
+      try {
+        setLoadingRoles(true)
+        const apiBase = process.env.NEXT_PUBLIC_API_BASE
+        if (!apiBase) throw new Error("API base not configured")
+        const bearer =
+          (typeof window !== "undefined" && window.localStorage.getItem("access_token")) ||
+          process.env.NEXT_PUBLIC_DEMO_BEARER ||
+          ""
+        const headers: Record<string, string> = {}
+        if (bearer) headers["Authorization"] = `Bearer ${bearer}`
+        const r = await fetch(`${apiBase}/users/${manageUserId}/roles`, { headers })
+        if (!r.ok) throw new Error(`List roles failed: ${r.status}`)
+        const data: { id: number; name: string }[] = await r.json()
+        setCurrentRoles((data || []).map((d) => d.name))
+      } catch (e: any) {
+        setCurrentRoles([])
+        toast({ title: "Failed to load roles", description: e.message, variant: "destructive" })
+      } finally {
+        setLoadingRoles(false)
+      }
+    }
+    load()
+  }, [manageOpen, manageUserId])
 
   const toCSVWithHeaders = (headers: string[], rows: any[]) => {
     if (!rows || rows.length === 0) return ""
@@ -144,6 +191,10 @@ export default function AdminInterface() {
         return "bg-blue-500/10 text-blue-600 border-blue-200"
       case "agent":
         return "bg-green-500/10 text-green-600 border-green-200"
+      case "sales representative":
+        return "bg-purple-500/10 text-purple-600 border-purple-200"
+      case "stock keeper":
+        return "bg-amber-500/10 text-amber-600 border-amber-200"
       default:
         return "bg-gray-500/10 text-gray-600 border-gray-200"
     }
@@ -213,6 +264,8 @@ export default function AdminInterface() {
                     <SelectItem value="admin">Admin</SelectItem>
                     <SelectItem value="manager">Manager</SelectItem>
                     <SelectItem value="agent">Agent</SelectItem>
+                    <SelectItem value="sales representative">Sales Representative</SelectItem>
+                    <SelectItem value="stock keeper">Stock Keeper</SelectItem>
                   </SelectContent>
                 </Select>
                 <Input placeholder="Temporary password" type="password" />
@@ -359,7 +412,15 @@ export default function AdminInterface() {
                             <Button size="sm" variant="outline">
                               <Eye className="w-4 h-4" />
                             </Button>
-                            <Button size="sm" variant="outline">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setManageUserId(String(user.id))
+                                setManageRole("")
+                                setManageOpen(true)
+                              }}
+                            >
                               <Edit className="w-4 h-4" />
                             </Button>
                             <Button size="sm" variant="outline">
@@ -581,6 +642,137 @@ export default function AdminInterface() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Manage Roles Dialog */}
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manage User Roles</DialogTitle>
+            <DialogDescription>Assign or remove a role for this user</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Current Roles</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {loadingRoles ? (
+                  <span className="text-sm text-muted-foreground">Loading...</span>
+                ) : currentRoles.length === 0 ? (
+                  <span className="text-sm text-muted-foreground">No roles</span>
+                ) : (
+                  currentRoles.map((r) => (
+                    <Badge key={r} className={getRoleBadgeColor(r)}>
+                      {r}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="ml-1 h-4 w-4"
+                        onClick={async () => {
+                          try {
+                            const apiBase = process.env.NEXT_PUBLIC_API_BASE
+                            if (!apiBase) throw new Error("API base not configured")
+                            const bearer =
+                              (typeof window !== "undefined" && window.localStorage.getItem("access_token")) ||
+                              process.env.NEXT_PUBLIC_DEMO_BEARER ||
+                              ""
+                            const headers: Record<string, string> = { "Content-Type": "application/json" }
+                            if (bearer) headers["Authorization"] = `Bearer ${bearer}`
+                            const rsp = await fetch(`${apiBase}/users/${manageUserId}/roles`, {
+                              method: "DELETE",
+                              headers,
+                              body: JSON.stringify({ role_name: r }),
+                            })
+                            if (!rsp.ok) throw new Error(`Remove failed: ${rsp.status}`)
+                            setCurrentRoles((prev) => prev.filter((x) => x !== r))
+                            toast({ title: "Role removed", description: `Removed ${r}` })
+                          } catch (e: any) {
+                            toast({ title: "Failed to remove role", description: e.message, variant: "destructive" })
+                          }
+                        }}
+                        title="Remove"
+                      >
+                        ×
+                      </Button>
+                    </Badge>
+                  ))
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Role</label>
+              <Select value={manageRole} onValueChange={setManageRole}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roleOptions.map((r) => (
+                    <SelectItem key={r} value={r.toLowerCase()}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                disabled={!manageUserId || !manageRole}
+                onClick={async () => {
+                  try {
+                    const apiBase = process.env.NEXT_PUBLIC_API_BASE
+                    if (!apiBase) throw new Error("API base not configured")
+                    const bearer =
+                      (typeof window !== "undefined" && window.localStorage.getItem("access_token")) ||
+                      process.env.NEXT_PUBLIC_DEMO_BEARER ||
+                      ""
+                    const headers: Record<string, string> = { "Content-Type": "application/json" }
+                    if (bearer) headers["Authorization"] = `Bearer ${bearer}`
+                    const r = await fetch(`${apiBase}/users/${manageUserId}/roles`, {
+                      method: "DELETE",
+                      headers,
+                      body: JSON.stringify({ role_name: manageRole.replace(/\b\w/g, (m) => m.toUpperCase()) }),
+                    })
+                    if (!r.ok) throw new Error(`Remove failed: ${r.status}`)
+                    toast({ title: "Role removed", description: `Removed ${manageRole} from user ${manageUserId}` })
+                    // Update local state instead of closing
+                    setCurrentRoles((prev) => prev.filter((x) => x.toLowerCase() !== manageRole))
+                  } catch (e: any) {
+                    toast({ title: "Failed to remove role", description: e.message, variant: "destructive" })
+                  }
+                }}
+              >
+                Remove Role
+              </Button>
+              <Button
+                disabled={!manageUserId || !manageRole}
+                onClick={async () => {
+                  try {
+                    const apiBase = process.env.NEXT_PUBLIC_API_BASE
+                    if (!apiBase) throw new Error("API base not configured")
+                    const bearer =
+                      (typeof window !== "undefined" && window.localStorage.getItem("access_token")) ||
+                      process.env.NEXT_PUBLIC_DEMO_BEARER ||
+                      ""
+                    const headers: Record<string, string> = { "Content-Type": "application/json" }
+                    if (bearer) headers["Authorization"] = `Bearer ${bearer}`
+                    const r = await fetch(`${apiBase}/users/${manageUserId}/roles`, {
+                      method: "POST",
+                      headers,
+                      body: JSON.stringify({ role_name: manageRole.replace(/\b\w/g, (m) => m.toUpperCase()) }),
+                    })
+                    if (!r.ok) throw new Error(`Assign failed: ${r.status}`)
+                    toast({ title: "Role assigned", description: `Assigned ${manageRole} to user ${manageUserId}` })
+                    // Update local state instead of closing
+                    const roleTitle = manageRole.replace(/\b\w/g, (m) => m.toUpperCase())
+                    setCurrentRoles((prev) => Array.from(new Set([...(prev || []), roleTitle])))
+                  } catch (e: any) {
+                    toast({ title: "Failed to assign role", description: e.message, variant: "destructive" })
+                  }
+                }}
+              >
+                Assign Role
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -151,6 +151,56 @@ export function CRMInterface() {
     status: "active" as Customer["status"],
     location: "",
   })
+
+  // Load customers from backend if API base is configured
+  useEffect(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE
+    if (!apiBase) return
+    const abort = new AbortController()
+    ;(async () => {
+      try {
+        const bearer =
+          (typeof window !== "undefined" && window.localStorage.getItem("access_token")) ||
+          process.env.NEXT_PUBLIC_DEMO_BEARER ||
+          ""
+        const headers: Record<string, string> = {}
+        if (bearer) headers["Authorization"] = `Bearer ${bearer}`
+        const r = await fetch(`${apiBase}/customers?limit=100`, { headers, signal: abort.signal })
+        if (!r.ok) return
+        const data: Array<{
+          id: number
+          email: string
+          name: string
+          phone?: string | null
+          segment: "vip" | "regular" | "new" | "at_risk"
+          status: "active" | "inactive"
+          location?: string | null
+          created_at?: string
+        }> = await r.json()
+        const mapped: Customer[] = data.map((c) => {
+          const createdAt = c.created_at ? new Date(c.created_at) : new Date()
+          return {
+            id: `CU-${String(c.id).padStart(3, "0")}`,
+            name: c.name,
+            email: c.email,
+            phone: c.phone || "",
+            segment: c.segment,
+            lifetimeValue: 0,
+            totalOrders: 0,
+            lastSeen: createdAt,
+            joinDate: createdAt,
+            status: c.status,
+            location: c.location || "",
+            tags: [],
+          }
+        })
+        setCustomers(mapped)
+      } catch (_) {
+        // ignore fetch errors for now; keep mock data
+      }
+    })()
+    return () => abort.abort()
+  }, [])
 
   const getSegmentBadge = (segment: Customer["segment"]) => {
     const segmentConfig = {

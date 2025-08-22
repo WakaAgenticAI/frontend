@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Plus, Search, MoreHorizontal, Eye, CheckCircle, RefreshCw, AlertTriangle, Truck, Package } from "lucide-react"
+import { Plus, Search, MoreHorizontal, Eye, CheckCircle, RefreshCw, AlertTriangle, Truck, Package, Printer } from "lucide-react"
 import { OrderWizard } from "./order-wizard"
 import { OrderDetail } from "./order-detail"
 
@@ -162,10 +162,16 @@ export function OrdersInterface() {
           <h1 className="text-3xl font-bold font-sans text-foreground">Orders</h1>
           <p className="text-muted-foreground font-serif">Manage and track all customer orders</p>
         </div>
-        <Button onClick={() => setShowOrderWizard(true)} className="flex items-center space-x-2">
-          <Plus className="h-4 w-4" />
-          <span>Create Order</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => window.print()} className="flex items-center space-x-2">
+            <Printer className="h-4 w-4" />
+            <span>Print</span>
+          </Button>
+          <Button onClick={() => setShowOrderWizard(true)} className="flex items-center space-x-2">
+            <Plus className="h-4 w-4" />
+            <span>Create Order</span>
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
