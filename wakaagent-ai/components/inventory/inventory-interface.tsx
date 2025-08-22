@@ -30,6 +30,7 @@ import {
   Eye,
   BarChart3,
   Zap,
+  Printer,
 } from "lucide-react"
 import { ForecastPanel } from "./forecast-panel"
 import { ProductDetail } from "./product-detail"
@@ -276,6 +277,10 @@ export function InventoryInterface() {
           <p className="text-muted-foreground font-serif">Manage stock levels with AI-powered demand predictions</p>
         </div>
         <div className="flex items-center space-x-2">
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer className="h-4 w-4 mr-2" />
+            Print
+          </Button>
           <Button variant="outline" onClick={() => setShowForecastPanel(true)}>
             <Brain className="h-4 w-4 mr-2" />
             AI Insights
@@ -298,7 +303,17 @@ export function InventoryInterface() {
                   <strong>{criticalProducts.length} products</strong> are critically low or out of stock and need
                   immediate attention.
                 </span>
-                <Button size="sm" variant="destructive">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => {
+                    setStockFilter("out")
+                    if (typeof window !== "undefined") {
+                      const el = document.getElementById("inventory-table")
+                      el?.scrollIntoView({ behavior: "smooth", block: "start" })
+                    }
+                  }}
+                >
                   View Critical Items
                 </Button>
               </AlertDescription>
@@ -312,7 +327,19 @@ export function InventoryInterface() {
                   <strong>{lowStockProducts.length} products</strong> are below reorder point and should be restocked
                   soon.
                 </span>
-                <Button size="sm" variant="outline" className="border-chart-2 text-chart-2 bg-transparent">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-chart-2 text-chart-2 bg-transparent"
+                  onClick={() => {
+                    if (lowStockProducts.length > 0) {
+                      handleCreatePO(lowStockProducts[0])
+                      toast({ title: "Bulk PO", description: "Opening PO for first low-stock item." })
+                    } else {
+                      toast({ title: "No low-stock items", description: "Nothing to include in PO.", variant: "destructive" })
+                    }
+                  }}
+                >
                   Create Bulk PO
                 </Button>
               </AlertDescription>
@@ -411,7 +438,7 @@ export function InventoryInterface() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div id="inventory-table" className="rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>

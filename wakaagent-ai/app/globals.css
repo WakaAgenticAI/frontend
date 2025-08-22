@@ -121,3 +121,53 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Print styles */
+@media print {
+  @page {
+    margin: 12mm;
+    size: auto;
+  }
+
+  html, body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Hide navigation and interactive UI */
+  header, nav, aside, footer,
+  .no-print,
+  button,
+  [role="button"],
+  .tabs-list,
+  .DialogOverlay,
+  .DialogContent,
+  .DropdownMenuContent,
+  .TooltipContent,
+  .ToastViewport {
+    display: none !important;
+  }
+
+  /* Remove shadows and rounded corners for better printing */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    background-image: none !important;
+  }
+
+  /* Tables look crisp */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    page-break-inside: auto;
+  }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr { page-break-inside: avoid; page-break-after: auto; }
+  th, td {
+    border: 1px solid #000 !important;
+    color: #000 !important;
+  }
+}
