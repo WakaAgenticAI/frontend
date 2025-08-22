@@ -112,6 +112,30 @@ export default function AdminInterface() {
   const [filterRole, setFilterRole] = useState("all")
   const [filterStatus, setFilterStatus] = useState("all")
 
+  const toCSVWithHeaders = (headers: string[], rows: any[]) => {
+    if (!rows || rows.length === 0) return ""
+    const escape = (val: any) => {
+      const v = val === undefined || val === null ? "" : String(val)
+      if (/[",\n]/.test(v)) return '"' + v.replace(/"/g, '""') + '"'
+      return v
+    }
+    const lines = [headers.join(","), ...rows.map((r) => headers.map((h) => escape((r as any)[h])).join(","))]
+    return lines.join("\n")
+  }
+
+  const download = (filename: string, content: string, type = "text/csv;charset=utf-8;") => {
+    // Prepend UTF-8 BOM for Excel compatibility
+    const blob = new Blob(['\ufeff' + content], { type })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   const getRoleBadgeColor = (role: string) => {
     switch (role.toLowerCase()) {
       case "admin":
@@ -147,7 +171,22 @@ export default function AdminInterface() {
           <p className="text-gray-600">Manage users, roles, and system settings</p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const rows = auditLogs.map((l) => ({
+                timestamp_iso: l.timestamp,
+                user: l.user,
+                action: l.action,
+                resource: l.resource,
+                ip: l.ip,
+              }))
+              const headers = ["timestamp_iso", "user", "action", "resource", "ip"]
+              const csv = toCSVWithHeaders(headers, rows)
+              download("audit_logs.csv", csv)
+            }}
+          >
             <Download className="w-4 h-4 mr-2" />
             Export Logs
           </Button>

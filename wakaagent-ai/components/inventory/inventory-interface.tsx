@@ -6,9 +6,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useToast } from "@/components/ui/use-toast"
 import {
   Search,
   Plus,
@@ -178,6 +186,19 @@ export function InventoryInterface() {
   const [searchQuery, setSearchQuery] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [stockFilter, setStockFilter] = useState<string>("all")
+  const [showAddProduct, setShowAddProduct] = useState(false)
+  const [newProduct, setNewProduct] = useState({
+    name: "",
+    sku: "",
+    category: "Electronics",
+    onHand: 0,
+    unitCost: 0,
+    sellingPrice: 0,
+    supplier: "",
+    reorderPoint: 5,
+    reorderQuantity: 10,
+  })
+  const { toast } = useToast()
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-NG", {
@@ -259,7 +280,7 @@ export function InventoryInterface() {
             <Brain className="h-4 w-4 mr-2" />
             AI Insights
           </Button>
-          <Button className="flex items-center space-x-2">
+          <Button className="flex items-center space-x-2" onClick={() => setShowAddProduct(true)}>
             <Plus className="h-4 w-4" />
             <span>Add Product</span>
           </Button>
@@ -496,6 +517,149 @@ export function InventoryInterface() {
           }}
         />
       )}
+
+      {/* Add Product Modal */}
+      <Dialog open={showAddProduct} onOpenChange={setShowAddProduct}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Product</DialogTitle>
+            <DialogDescription>Create a new product</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Product name"
+              value={newProduct.name}
+              onChange={(e) => setNewProduct((s) => ({ ...s, name: e.target.value }))}
+            />
+            <Input
+              placeholder="SKU"
+              value={newProduct.sku}
+              onChange={(e) => setNewProduct((s) => ({ ...s, sku: e.target.value }))}
+            />
+            <div className="flex gap-3">
+              <Select
+                value={newProduct.category}
+                onValueChange={(v) => setNewProduct((s) => ({ ...s, category: v }))}
+              >
+                <SelectTrigger className="w-1/2">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Electronics">Electronics</SelectItem>
+                  <SelectItem value="Clothing">Clothing</SelectItem>
+                  <SelectItem value="Home">Home & Garden</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Supplier"
+                value={newProduct.supplier}
+                onChange={(e) => setNewProduct((s) => ({ ...s, supplier: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                type="number"
+                placeholder="On Hand"
+                value={newProduct.onHand}
+                onChange={(e) => setNewProduct((s) => ({ ...s, onHand: Number(e.target.value || 0) }))}
+              />
+              <Input
+                type="number"
+                placeholder="Reorder Point"
+                value={newProduct.reorderPoint}
+                onChange={(e) => setNewProduct((s) => ({ ...s, reorderPoint: Number(e.target.value || 0) }))}
+              />
+              <Input
+                type="number"
+                placeholder="Reorder Qty"
+                value={newProduct.reorderQuantity}
+                onChange={(e) => setNewProduct((s) => ({ ...s, reorderQuantity: Number(e.target.value || 0) }))}
+              />
+              <Input
+                type="number"
+                placeholder="Unit Cost"
+                value={newProduct.unitCost}
+                onChange={(e) => setNewProduct((s) => ({ ...s, unitCost: Number(e.target.value || 0) }))}
+              />
+              <Input
+                type="number"
+                placeholder="Selling Price"
+                value={newProduct.sellingPrice}
+                onChange={(e) => setNewProduct((s) => ({ ...s, sellingPrice: Number(e.target.value || 0) }))}
+              />
+            </div>
+            <Button
+              className="w-full"
+              disabled={!newProduct.name || !newProduct.sku}
+              onClick={() => {
+                const now = new Date()
+                const created: Product = {
+                  id: `P-${String(products.length + 1).padStart(3, "0")}`,
+                  name: newProduct.name,
+                  sku: newProduct.sku,
+                  category: newProduct.category,
+                  onHand: newProduct.onHand,
+                  reserved: 0,
+                  available: newProduct.onHand,
+                  reorderPoint: newProduct.reorderPoint,
+                  reorderQuantity: newProduct.reorderQuantity,
+                  unitCost: newProduct.unitCost,
+                  sellingPrice: newProduct.sellingPrice,
+                  supplier: newProduct.supplier,
+                  lastRestocked: now,
+                  forecast: {
+                    demand7Days: 0,
+                    demand30Days: 0,
+                    stockoutRisk: "low",
+                    daysUntilStockout: 999,
+                    mape: 0,
+                    trend: "stable",
+                  },
+                }
+                setProducts((prev) => [created, ...prev])
+                setShowAddProduct(false)
+                setNewProduct({
+                  name: "",
+                  sku: "",
+                  category: "Electronics",
+                  onHand: 0,
+                  unitCost: 0,
+                  sellingPrice: 0,
+                  supplier: "",
+                  reorderPoint: 5,
+                  reorderQuantity: 10,
+                })
+                toast({ title: "Product added", description: `${created.name} created locally.` })
+                // Best-effort backend persistence (will be ignored if unauthorized or API base not set)
+                try {
+                  const apiBase = process.env.NEXT_PUBLIC_API_BASE
+                  if (apiBase) {
+                    const bearer =
+                      (typeof window !== "undefined" && window.localStorage.getItem("access_token")) ||
+                      process.env.NEXT_PUBLIC_DEMO_BEARER ||
+                      ""
+                    const headers: Record<string, string> = { "Content-Type": "application/json" }
+                    if (bearer) headers["Authorization"] = `Bearer ${bearer}`
+                    fetch(`${apiBase}/products`, {
+                      method: "POST",
+                      headers,
+                      body: JSON.stringify({
+                        sku: created.sku,
+                        name: created.name,
+                        unit: "unit",
+                        price_ngn: created.sellingPrice,
+                        tax_rate: 0,
+                      }),
+                    }).catch(() => {})
+                  }
+                } catch (_) {}
+              }}
+            >
+              Save Product
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
