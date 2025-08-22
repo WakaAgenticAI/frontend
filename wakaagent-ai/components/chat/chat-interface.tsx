@@ -11,6 +11,8 @@ import { MessageSquare, Send, User, Bot, ShoppingCart, Package, HeadphonesIcon, 
 import { AudioRecorder } from "./audio-recorder"
 import { AudioPlayer } from "./audio-player"
 import { ToolSuggestions } from "./tool-suggestions"
+import { createChatSession, executeTool, sendChatMessage } from "@/lib/api"
+import { connectChat, joinChatSession } from "@/lib/realtime"
 
 interface Message {
   id: string
@@ -56,6 +58,8 @@ export function ChatInterface() {
   const [isRecording, setIsRecording] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const [sessionId, setSessionId] = useState<number | null>(null)
+  const socketRef = useRef<ReturnType<typeof connectChat> | null>(null)
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -63,7 +67,55 @@ export function ChatInterface() {
     }
   }, [messages])
 
-  const handleSendMessage = (content: string, audioUrl?: string, transcript?: string) => {
+  // Initialize chat session and realtime
+  useEffect(() => {
+    let mounted = true
+    async function init() {
+      try {
+        const sess = await createChatSession(true)
+        if (!mounted) return
+        setSessionId(sess.id)
+        const base = process.env.NEXT_PUBLIC_BACKEND_BASE || "http://localhost:8000"
+        const sock = connectChat(base)
+        socketRef.current = sock
+        sock.on("connect", () => {
+          if (sess.id) joinChatSession(sock, sess.id)
+        })
+        sock.on("chat.message", (evt: any) => {
+          // Append messages from server
+          const m: Message = {
+            id: String(evt.id ?? Date.now()),
+            type: evt.role === "agent" ? "bot" : (evt.role === "user" ? "user" : "system"),
+            content: evt.content ?? "",
+            timestamp: new Date(),
+          }
+          setMessages((prev) => [...prev, m])
+          if (m.type === "bot") setIsTyping(false)
+        })
+        sock.on("chat.kb_suggestions", (evt: any) => {
+          // Present KB suggestions as a bot system message
+          const items = evt?.items || []
+          const m: Message = {
+            id: String(Date.now()),
+            type: "system",
+            content: `Found related docs: ${items.map((x: any) => x?.metadata?.title || "doc").join(", ")}`,
+            timestamp: new Date(),
+          }
+          setMessages((prev) => [...prev, m])
+        })
+      } catch (e) {
+        // ignore
+      }
+    }
+    init()
+    return () => {
+      mounted = false
+      socketRef.current?.disconnect()
+      socketRef.current = null
+    }
+  }, [])
+
+  const handleSendMessage = async (content: string, audioUrl?: string, transcript?: string) => {
     const newMessage: Message = {
       id: Date.now().toString(),
       type: "user",
@@ -77,53 +129,43 @@ export function ChatInterface() {
     setMessages((prev) => [...prev, newMessage])
     setInputValue("")
 
-    // Simulate bot response
-    setIsTyping(true)
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        type: "bot",
-        content: generateBotResponse(content || transcript || ""),
-        timestamp: new Date(),
-        toolSuggestions: [
-          { id: "create-order", label: "Create Order", action: "create_order", icon: ShoppingCart },
-          { id: "check-stock", label: "Check Stock", action: "check_stock", icon: Package },
-        ],
+    if (sessionId) {
+      try {
+        setIsTyping(true)
+        await sendChatMessage(sessionId, transcript || content)
+      } catch (e) {
+        setIsTyping(false)
       }
-      setMessages((prev) => [...prev, botResponse])
-      setIsTyping(false)
-    }, 2000)
+    }
   }
 
-  const generateBotResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase()
-    if (lowerMessage.includes("order") || lowerMessage.includes("buy")) {
-      return "I can help you create a new order. What products are you looking to purchase? I have access to our current inventory and can check availability in real-time."
-    }
-    if (lowerMessage.includes("stock") || lowerMessage.includes("inventory")) {
-      return "Let me check our current stock levels for you. Which products are you interested in? I can also show you our AI-powered demand forecasts."
-    }
-    if (lowerMessage.includes("support") || lowerMessage.includes("help")) {
-      return "I'd be happy to help! For complex issues, I can escalate you to our human support team. What specific assistance do you need?"
-    }
-    return "I understand you're asking about business operations. I can help with orders, inventory, customer management, and more. What would you like to focus on?"
-  }
+  // remove static generator; replies come from backend
 
-  const handleToolAction = (action: string) => {
-    const actionMessages = {
-      create_order: "I'll help you create a new order. Let me open the order creation wizard for you.",
-      check_stock: "Let me check our current inventory levels and show you the latest stock information.",
-      open_ticket: "I'm creating a support ticket and connecting you with our human support team.",
+  const handleToolAction = async (action: string) => {
+    const labelMap: Record<string, string> = {
+      create_order: "orders.create",
+      check_stock: "inventory.check",
+      open_ticket: "support.open",
     }
-
-    const systemMessage: Message = {
-      id: Date.now().toString(),
-      type: "system",
-      content: actionMessages[action as keyof typeof actionMessages] || "Action executed successfully.",
-      timestamp: new Date(),
+    const intent = labelMap[action] || action
+    try {
+      const res = await executeTool(intent, {})
+      const m: Message = {
+        id: Date.now().toString(),
+        type: "system",
+        content: `Executed ${intent}: ${JSON.stringify(res)}`,
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, m])
+    } catch (e: any) {
+      const m: Message = {
+        id: Date.now().toString(),
+        type: "system",
+        content: `Failed to execute ${intent}: ${e?.message || e}`,
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, m])
     }
-
-    setMessages((prev) => [...prev, systemMessage])
   }
 
   const handleEscalateToSupport = () => {

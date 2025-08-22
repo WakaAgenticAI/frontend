@@ -88,6 +88,30 @@ function FinanceInterface() {
   const [selectedPeriod, setSelectedPeriod] = useState("30d")
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
+  
+  const toCSVWithHeaders = (headers: string[], rows: any[]) => {
+    if (!rows || rows.length === 0) return ""
+    const escape = (val: any) => {
+      const v = val === undefined || val === null ? "" : String(val)
+      if (/[",\n]/.test(v)) return '"' + v.replace(/"/g, '""') + '"'
+      return v
+    }
+    const lines = [headers.join(","), ...rows.map((r) => headers.map((h) => escape((r as any)[h])).join(","))]
+    return lines.join("\n")
+  }
+
+  const download = (filename: string, content: string, type = "text/csv;charset=utf-8;") => {
+    // Prepend UTF-8 BOM for Excel compatibility
+    const blob = new Blob(['\ufeff' + content], { type })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
 
   const getRiskBadgeColor = (score: number) => {
     if (score >= 80) return "bg-red-500/10 text-red-600 border-red-200"
@@ -131,7 +155,41 @@ function FinanceInterface() {
               <SelectItem value="90d">Last 90 days</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const filtered = transactions
+                .filter((t) =>
+                  (filterStatus === "all" || t.status === filterStatus) &&
+                  (searchTerm.trim() === "" ||
+                    t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    t.customer.toLowerCase().includes(searchTerm.toLowerCase()))
+                )
+                .map((t) => ({
+                  id: t.id,
+                  date_iso: t.timestamp, // already in ISO-like string
+                  amount_ngn: t.amount,
+                  category: t.type,
+                  memo: "",
+                  counterparty: t.customer,
+                  tax: "",
+                  status: t.status,
+                }))
+              const headers = [
+                "id",
+                "date_iso",
+                "amount_ngn",
+                "category",
+                "memo",
+                "counterparty",
+                "tax",
+                "status",
+              ]
+              const csv = toCSVWithHeaders(headers, filtered)
+              download(`transactions_${selectedPeriod}.csv`, csv)
+            }}
+          >
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>

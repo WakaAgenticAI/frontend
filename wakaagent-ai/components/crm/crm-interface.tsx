@@ -7,6 +7,14 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useToast } from "@/components/ui/use-toast"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   Search,
@@ -133,6 +141,16 @@ export function CRMInterface() {
   const [segmentFilter, setSegmentFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const { toast } = useToast()
+  const [showAddCustomer, setShowAddCustomer] = useState(false)
+  const [newCustomer, setNewCustomer] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    segment: "regular" as Customer["segment"],
+    status: "active" as Customer["status"],
+    location: "",
+  })
 
   const getSegmentBadge = (segment: Customer["segment"]) => {
     const segmentConfig = {
@@ -217,7 +235,7 @@ export function CRMInterface() {
           <Button variant="outline" onClick={() => setViewMode(viewMode === "grid" ? "list" : "grid")}>
             {viewMode === "grid" ? "List View" : "Grid View"}
           </Button>
-          <Button className="flex items-center space-x-2">
+          <Button className="flex items-center space-x-2" onClick={() => setShowAddCustomer(true)}>
             <Plus className="h-4 w-4" />
             <span>Add Customer</span>
           </Button>
@@ -467,6 +485,127 @@ export function CRMInterface() {
 
       {/* Customer Profile Modal */}
       {selectedCustomer && <CustomerProfile customer={selectedCustomer} onClose={() => setSelectedCustomer(null)} />}
+
+      {/* Add Customer Modal */}
+      <Dialog open={showAddCustomer} onOpenChange={setShowAddCustomer}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Customer</DialogTitle>
+            <DialogDescription>Create a new customer profile</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              placeholder="Full name"
+              value={newCustomer.name}
+              onChange={(e) => setNewCustomer((s) => ({ ...s, name: e.target.value }))}
+            />
+            <Input
+              placeholder="Email"
+              type="email"
+              value={newCustomer.email}
+              onChange={(e) => setNewCustomer((s) => ({ ...s, email: e.target.value }))}
+            />
+            <Input
+              placeholder="Phone"
+              value={newCustomer.phone}
+              onChange={(e) => setNewCustomer((s) => ({ ...s, phone: e.target.value }))}
+            />
+            <Input
+              placeholder="Location"
+              value={newCustomer.location}
+              onChange={(e) => setNewCustomer((s) => ({ ...s, location: e.target.value }))}
+            />
+            <div className="flex gap-3">
+              <Select
+                value={newCustomer.segment}
+                onValueChange={(v) => setNewCustomer((s) => ({ ...s, segment: v as Customer["segment"] }))}
+              >
+                <SelectTrigger className="w-1/2">
+                  <SelectValue placeholder="Segment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vip">VIP</SelectItem>
+                  <SelectItem value="regular">Regular</SelectItem>
+                  <SelectItem value="new">New</SelectItem>
+                  <SelectItem value="at_risk">At Risk</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={newCustomer.status}
+                onValueChange={(v) => setNewCustomer((s) => ({ ...s, status: v as Customer["status"] }))}
+              >
+                <SelectTrigger className="w-1/2">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="w-full"
+              disabled={!newCustomer.name || !newCustomer.email}
+              onClick={() => {
+                const now = new Date()
+                const created: Customer = {
+                  id: `CU-${String(customers.length + 1).padStart(3, "0")}`,
+                  name: newCustomer.name,
+                  email: newCustomer.email,
+                  phone: newCustomer.phone,
+                  segment: newCustomer.segment,
+                  lifetimeValue: 0,
+                  totalOrders: 0,
+                  lastSeen: now,
+                  joinDate: now,
+                  status: newCustomer.status,
+                  location: newCustomer.location || "",
+                  tags: [],
+                }
+                setCustomers((prev) => [created, ...prev])
+                setShowAddCustomer(false)
+                setNewCustomer({ name: "", email: "", phone: "", segment: "regular", status: "active", location: "" })
+                toast({ title: "Customer added", description: `${created.name} created locally.` })
+                // Best-effort backend persistence
+                try {
+                  const apiBase = process.env.NEXT_PUBLIC_API_BASE
+                  if (apiBase) {
+                    const bearer =
+                      (typeof window !== "undefined" && window.localStorage.getItem("access_token")) ||
+                      process.env.NEXT_PUBLIC_DEMO_BEARER ||
+                      ""
+                    const headers: Record<string, string> = { "Content-Type": "application/json" }
+                    if (bearer) headers["Authorization"] = `Bearer ${bearer}`
+                    fetch(`${apiBase}/customers`, {
+                      method: "POST",
+                      headers,
+                      body: JSON.stringify({
+                        email: created.email,
+                        name: created.name,
+                        phone: created.phone || null,
+                        segment: created.segment,
+                        status: created.status,
+                        location: created.location || null,
+                      }),
+                    })
+                      .then(async (r) => {
+                        if (r.ok) {
+                          toast({ title: "Customer saved", description: `${created.name} persisted to backend.` })
+                        } else {
+                          const msg = await r.text()
+                          toast({ title: "Backend save failed", description: msg || `Status ${r.status}`, variant: "destructive" })
+                        }
+                      })
+                      .catch(() => {})
+                  }
+                } catch (_) {}
+              }}
+            >
+              Save Customer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
