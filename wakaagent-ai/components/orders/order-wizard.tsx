@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,20 +9,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Search, Plus, Minus, ShoppingCart, User, Package, CreditCard } from "lucide-react"
+import { getJSON, postJSON } from "@/lib/api"
 
 interface Customer {
-  id: string
+  id: number | string
   name: string
-  email: string
-  phone: string
+  email?: string
+  phone?: string
 }
 
 interface Product {
-  id: string
+  id: number | string
   name: string
   price: number
-  stock: number
-  sku: string
+  stock?: number
+  sku?: string
 }
 
 interface OrderItem {
@@ -35,18 +36,7 @@ interface OrderWizardProps {
   onOrderCreated: (order: any) => void
 }
 
-const mockCustomers: Customer[] = [
-  { id: "CU-001", name: "Adebayo Johnson", email: "adebayo@email.com", phone: "+234 801 234 5678" },
-  { id: "CU-002", name: "Fatima Abdullahi", email: "fatima@email.com", phone: "+234 802 345 6789" },
-  { id: "CU-003", name: "Chinedu Okafor", email: "chinedu@email.com", phone: "+234 803 456 7890" },
-]
-
-const mockProducts: Product[] = [
-  { id: "P-001", name: "iPhone 15 Pro", price: 450000, stock: 45, sku: "IPH-15-PRO" },
-  { id: "P-002", name: "Samsung Galaxy S24", price: 380000, stock: 8, sku: "SAM-S24" },
-  { id: "P-003", name: "MacBook Air M3", price: 650000, stock: 23, sku: "MBA-M3" },
-  { id: "P-004", name: "AirPods Pro", price: 89000, stock: 67, sku: "APP-PRO" },
-]
+// Data is fetched from backend
 
 export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
   const [step, setStep] = useState(1)
@@ -54,17 +44,40 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([])
   const [customerSearch, setCustomerSearch] = useState("")
   const [productSearch, setProductSearch] = useState("")
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-  const filteredCustomers = mockCustomers.filter(
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setLoading(true)
+        const [cust, prod] = await Promise.all([
+          getJSON<Customer[]>("/customers"),
+          getJSON<Product[]>("/products"),
+        ])
+        setCustomers(cust || [])
+        setProducts(prod || [])
+      } catch (e) {
+        console.error("Failed loading customers/products", e)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  const filteredCustomers = customers.filter(
     (customer) =>
       customer.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      customer.email.toLowerCase().includes(customerSearch.toLowerCase()),
+      (customer.email || "").toLowerCase().includes(customerSearch.toLowerCase()),
   )
 
-  const filteredProducts = mockProducts.filter(
+  const filteredProducts = products.filter(
     (product) =>
       product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      product.sku.toLowerCase().includes(productSearch.toLowerCase()),
+      (product.sku || "").toLowerCase().includes(productSearch.toLowerCase()),
   )
 
   const addProduct = (product: Product) => {
@@ -72,7 +85,9 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
     if (existingItem) {
       setOrderItems((prev) =>
         prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: Math.min(item.quantity + 1, product.stock) } : item,
+          item.product.id === product.id
+            ? { ...item, quantity: Math.min(item.quantity + 1, product.stock ?? Number.MAX_SAFE_INTEGER) }
+            : item,
         ),
       )
     } else {
@@ -80,13 +95,15 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
     }
   }
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const updateQuantity = (productId: string | number, quantity: number) => {
     if (quantity <= 0) {
       setOrderItems((prev) => prev.filter((item) => item.product.id !== productId))
     } else {
       setOrderItems((prev) =>
         prev.map((item) =>
-          item.product.id === productId ? { ...item, quantity: Math.min(quantity, item.product.stock) } : item,
+          item.product.id === productId
+            ? { ...item, quantity: Math.min(quantity, item.product.stock ?? Number.MAX_SAFE_INTEGER) }
+            : item,
         ),
       )
     }
@@ -104,18 +121,23 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
     }).format(amount)
   }
 
-  const handleCreateOrder = () => {
-    const newOrder = {
-      id: `ORD-${Math.floor(Math.random() * 10000) + 12848}`,
-      customer: selectedCustomer!,
-      status: "pending" as const,
-      total: getTotalAmount(),
-      items: orderItems.length,
-      channel: "online" as const,
-      date: new Date(),
-      paymentStatus: "pending" as const,
+  const handleCreateOrder = async () => {
+    if (!selectedCustomer || orderItems.length === 0) return
+    setSubmitting(true)
+    try {
+      const payload = {
+        customer_id: selectedCustomer.id,
+        items: orderItems.map((it) => ({ product_id: it.product.id, qty: it.quantity })),
+      }
+      const created = await postJSON<any>("/orders", payload)
+      onOrderCreated(created)
+      onClose()
+    } catch (e) {
+      console.error("Create order failed", e)
+      alert("Failed to create order. Please try again.")
+    } finally {
+      setSubmitting(false)
     }
-    onOrderCreated(newOrder)
   }
 
   const canProceedToStep2 = selectedCustomer !== null
@@ -225,17 +247,19 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <h4 className="font-medium font-serif">{product.name}</h4>
-                          <p className="text-sm text-muted-foreground">SKU: {product.sku}</p>
+                          {product.sku && <p className="text-sm text-muted-foreground">SKU: {product.sku}</p>}
                           <div className="flex items-center space-x-2 mt-1">
                             <span className="font-medium">{formatCurrency(product.price)}</span>
                             <Badge
-                              variant={product.stock > 10 ? "secondary" : product.stock > 0 ? "outline" : "destructive"}
+                              variant={
+                                (product.stock ?? 0) > 10 ? "secondary" : (product.stock ?? 0) > 0 ? "outline" : "destructive"
+                              }
                             >
-                              {product.stock} in stock
+                              {(product.stock ?? 0)} in stock
                             </Badge>
                           </div>
                         </div>
-                        <Button size="sm" onClick={() => addProduct(product)} disabled={product.stock === 0}>
+                        <Button size="sm" onClick={() => addProduct(product)} disabled={(product.stock ?? 0) === 0}>
                           <Plus className="h-4 w-4" />
                         </Button>
                       </div>
@@ -271,7 +295,7 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
                             size="sm"
                             variant="outline"
                             onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                            disabled={item.quantity >= item.product.stock}
+                            disabled={item.quantity >= (item.product.stock ?? Number.MAX_SAFE_INTEGER)}
                           >
                             <Plus className="h-3 w-3" />
                           </Button>
@@ -356,7 +380,7 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
                 Next
               </Button>
             ) : (
-              <Button onClick={handleCreateOrder} disabled={!canCreateOrder}>
+              <Button onClick={handleCreateOrder} disabled={!canCreateOrder || submitting}>
                 Create Order
               </Button>
             )}

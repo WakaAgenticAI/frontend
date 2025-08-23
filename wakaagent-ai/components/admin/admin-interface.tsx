@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useToast } from "@/components/ui/use-toast"
 import { Switch } from "@/components/ui/switch"
+import { getJSON, postJSON } from "@/lib/api"
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,7 @@ import {
   UserPlus,
   Download,
   ClipboardList,
+  BarChart3,
 } from "lucide-react"
 
 const users = [
@@ -329,6 +331,7 @@ export default function AdminInterface() {
           <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>
           <TabsTrigger value="settings">System Settings</TabsTrigger>
           <TabsTrigger value="audit">Audit Logs</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="space-y-4">
@@ -432,6 +435,108 @@ export default function AdminInterface() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="reports" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="w-5 h-5" />
+                Reports
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2 p-4 border rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">Daily Sales</div>
+                      <div className="text-sm text-muted-foreground">Build and view latest daily sales report</div>
+                    </div>
+                    <div className="space-x-2">
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            await postJSON("/admin/reports/daily-sales", {})
+                            toast({ title: "Triggered", description: "Daily sales report build started" })
+                          } catch (e: any) {
+                            toast({ title: "Failed", description: e.message, variant: "destructive" })
+                          }
+                        }}
+                      >
+                        Trigger
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const latest = await getJSON<any>("/admin/reports/daily-sales/latest")
+                            const msg = latest
+                              ? `Status: ${latest.status} • ID: ${latest.id} • Created: ${latest.created_at || latest.createdAt}`
+                              : "No report yet"
+                            toast({ title: "Latest Daily Sales", description: msg })
+                            if (latest?.download_url) {
+                              window.open(latest.download_url, "_blank")
+                            }
+                          } catch (e: any) {
+                            toast({ title: "Failed", description: e.message, variant: "destructive" })
+                          }
+                        }}
+                      >
+                        View Latest
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 p-4 border rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">Monthly Audit</div>
+                      <div className="text-sm text-muted-foreground">Build and view latest monthly audit report</div>
+                    </div>
+                    <div className="space-x-2">
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            await postJSON("/admin/reports/monthly-audit", {})
+                            toast({ title: "Triggered", description: "Monthly audit report build started" })
+                          } catch (e: any) {
+                            toast({ title: "Failed", description: e.message, variant: "destructive" })
+                          }
+                        }}
+                      >
+                        Trigger
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const latest = await getJSON<any>("/admin/reports/monthly-audit/latest")
+                            const msg = latest
+                              ? `Status: ${latest.status} • ID: ${latest.id} • Created: ${latest.created_at || latest.createdAt}`
+                              : "No report yet"
+                            toast({ title: "Latest Monthly Audit", description: msg })
+                            if (latest?.download_url) {
+                              window.open(latest.download_url, "_blank")
+                            }
+                          } catch (e: any) {
+                            toast({ title: "Failed", description: e.message, variant: "destructive" })
+                          }
+                        }}
+                      >
+                        View Latest
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

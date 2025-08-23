@@ -4,6 +4,7 @@ import type React from "react"
 import Image from "next/image"
 
 import { useState } from "react"
+import { API_BASE } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,12 +22,27 @@ export function LoginForm({ onLogin }: LoginFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
-    // Simulate authentication
-    setTimeout(() => {
-      setIsLoading(false)
+    try {
+      const rsp = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      if (!rsp.ok) {
+        const txt = await rsp.text()
+        throw new Error(`Login failed: ${rsp.status} ${txt}`)
+      }
+      const data = await rsp.json()
+      if (typeof window !== "undefined" && data?.access_token) {
+        window.localStorage.setItem("access_token", data.access_token)
+      }
       onLogin()
-    }, 1000)
+    } catch (err) {
+      console.error(err)
+      alert("Login failed. Check credentials and try again.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (

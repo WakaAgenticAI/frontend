@@ -75,8 +75,11 @@ export function ChatInterface() {
         const sess = await createChatSession(true)
         if (!mounted) return
         setSessionId(sess.id)
-        const base = process.env.NEXT_PUBLIC_BACKEND_BASE || "http://localhost:8000"
-        const sock = connectChat(base)
+        // Derive backend base (origin) from API base so WS host/port match the REST API
+        // e.g., API_BASE=http://127.0.0.1:8002/api/v1 -> backendBase=http://127.0.0.1:8002
+        const { API_BASE } = await import("@/lib/api")
+        const backendBase = new URL(API_BASE).origin
+        const sock = connectChat(backendBase)
         socketRef.current = sock
         sock.on("connect", () => {
           if (sess.id) joinChatSession(sock, sess.id)

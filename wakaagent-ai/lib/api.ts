@@ -1,11 +1,17 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api/v1";
 
 export async function postJSON<T>(path: string, body: any, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...(init?.headers as any || {}) };
+  try {
+    if (typeof window !== "undefined") {
+      const token = window.localStorage.getItem("access_token");
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    }
+  } catch {}
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+    headers,
     body: JSON.stringify(body),
-    credentials: "include",
     ...init,
   });
   if (!res.ok) {
@@ -16,7 +22,14 @@ export async function postJSON<T>(path: string, body: any, init?: RequestInit): 
 }
 
 export async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { credentials: "include", ...init });
+  const headers: Record<string, string> = { ...(init?.headers as any || {}) };
+  try {
+    if (typeof window !== "undefined") {
+      const token = window.localStorage.getItem("access_token");
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+    }
+  } catch {}
+  const res = await fetch(`${API_BASE}${path}`, { headers, ...init });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error(`HTTP ${res.status}: ${txt}`);
