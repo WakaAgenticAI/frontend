@@ -48,6 +48,7 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [productTypeFilter, setProductTypeFilter] = useState<"all" | "drink">("all")
 
   useEffect(() => {
     const load = async () => {
@@ -74,11 +75,20 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
       (customer.email || "").toLowerCase().includes(customerSearch.toLowerCase()),
   )
 
-  const filteredProducts = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      (product.sku || "").toLowerCase().includes(productSearch.toLowerCase()),
-  )
+  const filteredProducts = products
+    .filter(
+      (product) =>
+        product.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+        (product.sku || "").toLowerCase().includes(productSearch.toLowerCase()),
+    )
+    .filter((product) => {
+      if (productTypeFilter === "all") return true
+      // Treat items with name or sku containing 'drink' as drinks
+      const needle = "drink"
+      return (
+        product.name.toLowerCase().includes(needle) || (product.sku || "").toLowerCase().includes(needle)
+      )
+    })
 
   const addProduct = (product: Product) => {
     const existingItem = orderItems.find((item) => item.product.id === product.id)
@@ -235,6 +245,17 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
                   className="pl-10"
                 />
               </div>
+              <div className="mt-3 flex items-center gap-3">
+                <Label className="text-sm">Type</Label>
+                <select
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  value={productTypeFilter}
+                  onChange={(e) => setProductTypeFilter(e.target.value as any)}
+                >
+                  <option value="all">All</option>
+                  <option value="drink">Drink</option>
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -246,8 +267,11 @@ export function OrderWizard({ onClose, onOrderCreated }: OrderWizardProps) {
                     <Card key={product.id} className="p-3">
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <h4 className="font-medium font-serif">{product.name}</h4>
-                          {product.sku && <p className="text-sm text-muted-foreground">SKU: {product.sku}</p>}
+                          <h4 className="font-medium font-serif">
+                            {product.name} {product.sku && (
+                              <span className="text-muted-foreground text-sm">(Stock Keeping Unit: {product.sku})</span>
+                            )}
+                          </h4>
                           <div className="flex items-center space-x-2 mt-1">
                             <span className="font-medium">{formatCurrency(product.price)}</span>
                             <Badge
