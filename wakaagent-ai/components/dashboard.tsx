@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -136,7 +137,7 @@ function Dashboard() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold font-sans text-foreground">Dashboard</h1>
           <p className="text-muted-foreground font-serif">Welcome back! Here's what's happening with your business.</p>
@@ -149,6 +150,9 @@ function Dashboard() {
           <Badge variant="outline" className="bg-accent/10 text-accent-foreground border-accent">
             Real-time updates
           </Badge>
+          <Link href="/">
+            <Button size="sm" variant="outline">Back to Home</Button>
+          </Link>
         </div>
       </div>
 

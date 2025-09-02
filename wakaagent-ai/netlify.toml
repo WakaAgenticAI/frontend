@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Optionally set environment variables here, or configure them in Netlify UI
+  # NEXT_PUBLIC_API_BASE = "https://your-backend.example.com/api/v1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[dev]
+  command = "npm run dev"
+  port = 3000
+  targetPort = 3000
+  autoLaunch = false
