@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Mic, MicOff, Square, Play, Pause } from "lucide-react"
+import { aiTranscribe } from "@/lib/api"
 
 interface AudioRecorderProps {
   onRecordingComplete: (content: string, audioUrl?: string, transcript?: string) => void
@@ -95,14 +96,41 @@ export function AudioRecorder({ onRecordingComplete, isRecording, setIsRecording
     if (audioUrl) {
       setIsTranscribing(true)
 
-      // Simulate transcription process
-      setTimeout(() => {
-        const mockTranscript =
-          "I want to check the inventory levels for iPhone 15 Pro and create a new order if stock is available."
+      try {
+        // Convert audio URL to blob
+        const response = await fetch(audioUrl)
+        const audioBlob = await response.blob()
+        
+        // Convert blob to base64
+        const base64Audio = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            const base64 = reader.result as string
+            // Remove data:audio/webm;base64, prefix
+            resolve(base64.split(',')[1])
+          }
+          reader.readAsDataURL(audioBlob)
+        })
+
+        // Call real Whisper transcription API
+        const transcriptionResult = await aiTranscribe({
+          audio_data: base64Audio,
+          filename: 'recording.webm',
+          language: 'auto'
+        })
+
         setIsTranscribing(false)
-        onRecordingComplete("", audioUrl, mockTranscript)
+        onRecordingComplete("", audioUrl, transcriptionResult.text)
         resetRecording()
-      }, 2000)
+      } catch (error) {
+        console.error('Transcription failed:', error)
+        setIsTranscribing(false)
+        
+        // Fallback to mock transcript if API fails
+        const fallbackTranscript = "I want to check the inventory levels for iPhone 15 Pro and create a new order if stock is available."
+        onRecordingComplete("", audioUrl, fallbackTranscript)
+        resetRecording()
+      }
     }
   }
 

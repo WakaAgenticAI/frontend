@@ -11,7 +11,8 @@ import { MessageSquare, Send, User, Bot, ShoppingCart, Package, HeadphonesIcon, 
 import { AudioRecorder } from "./audio-recorder"
 import { AudioPlayer } from "./audio-player"
 import { ToolSuggestions } from "./tool-suggestions"
-import { createChatSession, executeTool, sendChatMessage } from "@/lib/api"
+import { LanguageSelector } from "./language-selector"
+import { createChatSession, executeTool, sendChatMessage, aiComplete, aiCompleteStream, aiMultilingual, aiClassifyIntent } from "@/lib/api"
 import { connectChat, joinChatSession } from "@/lib/realtime"
 
 interface Message {
@@ -23,6 +24,10 @@ interface Message {
   audioUrl?: string
   transcript?: string
   hasMemory?: boolean
+  detectedLanguage?: string
+  confidence?: number
+  intent?: string
+  agent?: string
   toolSuggestions?: Array<{
     id: string
     label: string
@@ -57,6 +62,8 @@ export function ChatInterface() {
   const [inputValue, setInputValue] = useState("")
   const [isRecording, setIsRecording] = useState(false)
   const [isTyping, setIsTyping] = useState(false)
+  const [selectedLanguage, setSelectedLanguage] = useState("en")
+  const [isStreaming, setIsStreaming] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [sessionId, setSessionId] = useState<number | null>(null)
   const socketRef = useRef<ReturnType<typeof connectChat> | null>(null)
@@ -119,25 +126,130 @@ export function ChatInterface() {
   }, [])
 
   const handleSendMessage = async (content: string, audioUrl?: string, transcript?: string) => {
+    const messageContent = transcript || content
+    
+    // Classify intent first
+    let intentResult = null
+    try {
+      intentResult = await aiClassifyIntent({
+        message: messageContent,
+        context: { user_type: "customer", session_id: sessionId }
+      })
+    } catch (e) {
+      console.warn('Intent classification failed:', e)
+    }
+
     const newMessage: Message = {
       id: Date.now().toString(),
       type: "user",
-      content: transcript || content,
+      content: messageContent,
       timestamp: new Date(),
       hasAudio: !!audioUrl,
       audioUrl,
       transcript,
+      intent: intentResult?.intent,
+      agent: intentResult?.agent,
     }
 
     setMessages((prev) => [...prev, newMessage])
     setInputValue("")
 
+    // Handle multilingual processing if not English
+    if (selectedLanguage !== "en") {
+      try {
+        setIsTyping(true)
+        const multilingualResult = await aiMultilingual({
+          message: messageContent,
+          context: "customer_service"
+        })
+        
+        const botMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          type: "bot",
+          content: multilingualResult.response,
+          timestamp: new Date(),
+          detectedLanguage: multilingualResult.detected_language,
+          confidence: multilingualResult.confidence,
+        }
+        
+        setMessages((prev) => [...prev, botMessage])
+        setIsTyping(false)
+        return
+      } catch (e) {
+        console.error('Multilingual processing failed:', e)
+        setIsTyping(false)
+      }
+    }
+
+    // Use AI completion for enhanced responses
     if (sessionId) {
       try {
         setIsTyping(true)
-        await sendChatMessage(sessionId, transcript || content)
-      } catch (e) {
+        setIsStreaming(true)
+        
+        // Try streaming first, fallback to regular completion
+        try {
+          const streamingResponse = aiCompleteStream({
+            prompt: messageContent,
+            session_id: sessionId,
+            temperature: 0.7,
+            max_tokens: 500
+          })
+          
+          const botMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            type: "bot",
+            content: "",
+            timestamp: new Date(),
+          }
+          
+          setMessages((prev) => [...prev, botMessage])
+          
+          // Stream the response
+          for await (const chunk of streamingResponse) {
+            setMessages((prev) => {
+              const updated = [...prev]
+              const lastMessage = updated[updated.length - 1]
+              if (lastMessage.type === "bot" && lastMessage.id === botMessage.id) {
+                lastMessage.content += chunk
+              }
+              return updated
+            })
+          }
+          
+          setIsStreaming(false)
+        } catch (streamError) {
+          // Fallback to regular completion
+          const response = await aiComplete({
+            prompt: messageContent,
+            session_id: sessionId,
+            temperature: 0.7,
+            max_tokens: 500
+          })
+          
+          const botMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            type: "bot",
+            content: response.content,
+            timestamp: new Date(),
+          }
+          
+          setMessages((prev) => [...prev, botMessage])
+          setIsStreaming(false)
+        }
+        
         setIsTyping(false)
+      } catch (e) {
+        console.error('AI completion failed:', e)
+        setIsTyping(false)
+        setIsStreaming(false)
+        
+        // Fallback to original chat message
+        try {
+          await sendChatMessage(sessionId, messageContent)
+        } catch (fallbackError) {
+          console.error('Fallback chat message failed:', fallbackError)
+        }
       }
     }
   }
@@ -195,6 +307,17 @@ export function ChatInterface() {
                 Online
               </Badge>
             </CardTitle>
+            <div className="flex items-center justify-between mt-2">
+              <LanguageSelector 
+                selectedLanguage={selectedLanguage}
+                onLanguageChange={setSelectedLanguage}
+              />
+              {isStreaming && (
+                <Badge variant="outline" className="text-xs animate-pulse">
+                  Streaming...
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="flex-1 flex flex-col p-0">
             <ScrollArea className="flex-1 px-6" ref={scrollAreaRef}>
@@ -241,6 +364,30 @@ export function ChatInterface() {
                               <span className="text-xs text-muted-foreground">
                                 {message.timestamp.toLocaleTimeString()}
                               </span>
+                              {message.detectedLanguage && message.detectedLanguage !== 'en' && (
+                                <>
+                                  <span className="text-xs text-muted-foreground">•</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {message.detectedLanguage} ({Math.round((message.confidence || 0) * 100)}%)
+                                  </Badge>
+                                </>
+                              )}
+                              {message.intent && (
+                                <>
+                                  <span className="text-xs text-muted-foreground">•</span>
+                                  <Badge variant="secondary" className="text-xs">
+                                    {message.intent}
+                                  </Badge>
+                                </>
+                              )}
+                              {message.agent && (
+                                <>
+                                  <span className="text-xs text-muted-foreground">•</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {message.agent}
+                                  </Badge>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -253,7 +400,7 @@ export function ChatInterface() {
                     </div>
                   </div>
                 ))}
-                {isTyping && (
+                {(isTyping || isStreaming) && (
                   <div className="flex justify-start">
                     <div className="bg-secondary/10 text-foreground border border-secondary/20 rounded-lg px-4 py-2">
                       <div className="flex items-center space-x-2">
@@ -269,6 +416,9 @@ export function ChatInterface() {
                             style={{ animationDelay: "0.2s" }}
                           ></div>
                         </div>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          {isStreaming ? "Streaming response..." : "Thinking..."}
+                        </span>
                       </div>
                     </div>
                   </div>
