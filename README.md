@@ -107,3 +107,7 @@ A Next.js 15 app for WakaAgent AI: comprehensive business management with advanc
 - We do not send cookies; CORS can keep `allow_credentials` off when using Bearer tokens.
 - AI features require a properly configured backend with API keys.
 - Voice transcription requires microphone permissions in your browser.
+
+## License
+
+Apache-2.0
