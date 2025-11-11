@@ -231,3 +231,110 @@ export async function aiCompleteRAG(
     session_id: options.session_id,
   });
 }
+
+// Debt management APIs
+export interface Debt {
+  id: number;
+  type: string;
+  entity_type: string;
+  entity_id?: number;
+  amount_ngn: number;
+  currency: string;
+  description?: string;
+  due_date?: string;
+  status: string;
+  priority: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DebtSummary {
+  receivables_total: number;
+  payables_total: number;
+  receivables_count: number;
+  payables_count: number;
+  overdue_receivables: number;
+  overdue_payables: number;
+}
+
+export interface DebtAgingReport {
+  range_0_30: number;
+  range_31_60: number;
+  range_61_90: number;
+  range_90_plus: number;
+  total_overdue_amount: number;
+  total_debts: number;
+  total_amount: number;
+}
+
+export interface DebtPayment {
+  id: number;
+  debt_id: number;
+  amount_ngn: number;
+  payment_date: string;
+  payment_method?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export async function getDebts(params: {
+  type_filter?: string;
+  status_filter?: string;
+  entity_type?: string;
+  entity_id?: number;
+  due_before?: string;
+  due_after?: string;
+  skip?: number;
+  limit?: number;
+} = {}): Promise<Debt[]> {
+  const queryParams = new URLSearchParams();
+  if (params.type_filter) queryParams.set('type_filter', params.type_filter);
+  if (params.status_filter) queryParams.set('status_filter', params.status_filter);
+  if (params.entity_type) queryParams.set('entity_type', params.entity_type);
+  if (params.entity_id) queryParams.set('entity_id', params.entity_id.toString());
+  if (params.due_before) queryParams.set('due_before', params.due_before);
+  if (params.due_after) queryParams.set('due_after', params.due_after);
+  if (params.skip) queryParams.set('skip', params.skip.toString());
+  if (params.limit) queryParams.set('limit', params.limit.toString());
+
+  return getJSON(`/debts?${queryParams.toString()}`);
+}
+
+export async function createDebt(data: {
+  type: string;
+  entity_type: string;
+  entity_id?: number;
+  amount_ngn: number;
+  currency?: string;
+  description?: string;
+  due_date?: string;
+  priority?: string;
+}): Promise<Debt> {
+  return postJSON('/debts', data);
+}
+
+export async function updateDebt(debtId: number, data: {
+  status?: string;
+  priority?: string;
+  description?: string;
+  due_date?: string;
+}): Promise<Debt> {
+  return postJSON(`/debts/${debtId}`, data, { method: 'PUT' });
+}
+
+export async function addPayment(debtId: number, data: {
+  amount_ngn: number;
+  payment_date: string;
+  payment_method?: string;
+  notes?: string;
+}): Promise<DebtPayment> {
+  return postJSON(`/debts/${debtId}/payments`, data);
+}
+
+export async function getDebtSummary(): Promise<DebtSummary> {
+  return getJSON('/debts/reports/summary');
+}
+
+export async function getAgingReport(): Promise<DebtAgingReport> {
+  return getJSON('/debts/reports/aging');
+}

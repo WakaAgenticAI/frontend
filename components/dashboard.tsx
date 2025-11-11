@@ -121,10 +121,13 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
 }
 
 function Dashboard() {
-  const [lastUpdate, setLastUpdate] = useState(new Date())
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [isRealTime, setIsRealTime] = useState(true)
 
   useEffect(() => {
+    // Set initial time on client mount to avoid hydration mismatch
+    setLastUpdate(new Date())
+    
     if (!isRealTime) return
 
     const interval = setInterval(() => {
@@ -145,7 +148,7 @@ function Dashboard() {
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-2 text-sm text-muted-foreground">
             <Activity className="h-4 w-4 text-chart-4" />
-            <span>Last updated: {lastUpdate.toLocaleTimeString()}</span>
+            <span>Last updated: {lastUpdate ? lastUpdate.toLocaleTimeString() : 'Loading...'}</span>
           </div>
           <Badge variant="outline" className="bg-accent/10 text-accent-foreground border-accent">
             Real-time updates

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +23,7 @@ import {
   Pie,
   Cell,
 } from "recharts"
-import { TrendingUp, DollarSign, CreditCard, AlertTriangle, Shield, Search, Download, Eye, Ban } from "lucide-react"
+import { TrendingUp, DollarSign, CreditCard, AlertTriangle, Shield, Search, Download, Eye, Ban, FileText } from "lucide-react"
 
 const revenueData = [
   { month: "Jan", revenue: 45000, expenses: 32000, profit: 13000 },
@@ -280,6 +281,27 @@ function FinanceInterface() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Debt Management Quick Access */}
+      <Card className="border-l-4 border-l-blue-500">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-blue-500" />
+            Debt Management
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            Track receivables and payables, manage overdue debts, and generate aging reports.
+          </p>
+          <Link href="/debts">
+            <Button className="w-full">
+              <FileText className="w-4 h-4 mr-2" />
+              Manage Debts
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
 
       {/* Charts and Analytics */}
       <Tabs defaultValue="revenue" className="space-y-4">
