@@ -59,6 +59,7 @@ export interface AICompleteRequest {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  language?: string;
 }
 
 export interface AICompleteResponse {

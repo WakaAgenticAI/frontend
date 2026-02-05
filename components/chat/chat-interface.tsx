@@ -193,7 +193,8 @@ export function ChatInterface() {
             prompt: messageContent,
             session_id: sessionId,
             temperature: 0.7,
-            max_tokens: 500
+            max_tokens: 500,
+            language: selectedLanguage
           })
           
           const botMessage: Message = {
@@ -224,7 +225,8 @@ export function ChatInterface() {
             prompt: messageContent,
             session_id: sessionId,
             temperature: 0.7,
-            max_tokens: 500
+            max_tokens: 500,
+            language: selectedLanguage
           })
           
           const botMessage: Message = {
