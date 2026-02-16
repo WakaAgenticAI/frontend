@@ -67,6 +67,7 @@ export function ChatInterface() {
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const [sessionId, setSessionId] = useState<number | null>(null)
   const socketRef = useRef<ReturnType<typeof connectChat> | null>(null)
+  const localBotIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -92,14 +93,25 @@ export function ChatInterface() {
           if (sess.id) joinChatSession(sock, sess.id)
         })
         sock.on("chat.message", (evt: any) => {
-          // Append messages from server
+          // Skip messages already added locally via REST response to prevent duplication
+          const evtId = String(evt.id ?? "")
+          if (localBotIdsRef.current.has(evtId)) {
+            localBotIdsRef.current.delete(evtId)
+            return
+          }
+          // Only append messages from other sources (e.g., another user, server push)
           const m: Message = {
-            id: String(evt.id ?? Date.now()),
+            id: evtId || String(Date.now()),
             type: evt.role === "agent" ? "bot" : (evt.role === "user" ? "user" : "system"),
             content: evt.content ?? "",
             timestamp: new Date(),
           }
-          setMessages((prev) => [...prev, m])
+          // Deduplicate: skip if a message with similar content was just added
+          setMessages((prev) => {
+            const recent = prev.slice(-3)
+            if (recent.some((r) => r.type === m.type && r.content === m.content)) return prev
+            return [...prev, m]
+          })
           if (m.type === "bot") setIsTyping(false)
         })
         sock.on("chat.kb_suggestions", (evt: any) => {

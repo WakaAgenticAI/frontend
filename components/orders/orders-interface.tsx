@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Plus, Search, MoreHorizontal, Eye, CheckCircle, RefreshCw, AlertTriangle, Truck, Package, Printer } from "lucide-react"
+import { Plus, Search, MoreHorizontal, Eye, CheckCircle, RefreshCw, AlertTriangle, Truck, Package, Printer, Loader2 } from "lucide-react"
 import { OrderWizard } from "./order-wizard"
 import { OrderDetail } from "./order-detail"
+import { getJSON } from "@/lib/api"
 
 interface Order {
   id: string
@@ -29,7 +30,7 @@ interface Order {
   paymentStatus: "pending" | "paid" | "failed" | "refunded"
 }
 
-const mockOrders: Order[] = [
+const fallbackOrders: Order[] = [
   {
     id: "ORD-12847",
     customer: { name: "Adebayo Johnson", email: "adebayo@email.com", id: "CU-001" },
@@ -85,8 +86,51 @@ const mockOrders: Order[] = [
   },
 ]
 
+function mapApiOrder(apiOrder: any): Order {
+  const itemCount = apiOrder.items?.length || 0
+  return {
+    id: `ORD-${apiOrder.id}`,
+    customer: {
+      name: apiOrder.customer_name || `Customer ${apiOrder.customer_id || "?"}`,
+      email: apiOrder.customer_email || "",
+      id: `CU-${apiOrder.customer_id || "?"}`,
+    },
+    status: apiOrder.status || "pending",
+    total: Number(apiOrder.total) || 0,
+    items: itemCount,
+    channel: apiOrder.channel || "online",
+    date: new Date(apiOrder.created_at || Date.now()),
+    riskScore: apiOrder.risk_score,
+    trackingNumber: apiOrder.tracking_number,
+    paymentStatus: apiOrder.payment_status || "pending",
+  }
+}
+
 export function OrdersInterface() {
-  const [orders, setOrders] = useState<Order[]>(mockOrders)
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [dataSource, setDataSource] = useState<"live" | "demo">("demo")
+
+  const fetchOrders = useCallback(async () => {
+    setLoading(true)
+    try {
+      const apiOrders = await getJSON<any[]>("/orders")
+      if (apiOrders && apiOrders.length > 0) {
+        setOrders(apiOrders.map(mapApiOrder))
+        setDataSource("live")
+      } else {
+        setOrders(fallbackOrders)
+        setDataSource("demo")
+      }
+    } catch {
+      setOrders(fallbackOrders)
+      setDataSource("demo")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchOrders() }, [fetchOrders])
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showOrderWizard, setShowOrderWizard] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -163,6 +207,12 @@ export function OrdersInterface() {
           <p className="text-muted-foreground font-serif">Manage and track all customer orders</p>
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant="outline" className={dataSource === "live" ? "bg-chart-4/10 text-chart-4 border-chart-4" : "bg-accent/10 text-accent-foreground border-accent"}>
+            {loading ? "Loading..." : dataSource === "live" ? "Live data" : "Demo data"}
+          </Badge>
+          <Button variant="outline" size="sm" onClick={fetchOrders} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </Button>
           <Button variant="outline" onClick={() => window.print()} className="flex items-center space-x-2">
             <Printer className="h-4 w-4" />
             <span>Print</span>

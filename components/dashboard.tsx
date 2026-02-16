@@ -15,9 +15,11 @@ import {
   Activity,
 } from "lucide-react"
 import { Area, AreaChart, Bar, BarChart, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { getJSON, getDebtSummary } from "@/lib/api"
 
-const salesTrendData = [
+// ─── Fallback mock data (used when API is unavailable) ─────
+const fallbackSalesTrend = [
   { name: "Mon", sales: 2400, orders: 45 },
   { name: "Tue", sales: 1398, orders: 32 },
   { name: "Wed", sales: 9800, orders: 78 },
@@ -27,7 +29,7 @@ const salesTrendData = [
   { name: "Sun", sales: 4300, orders: 72 },
 ]
 
-const inventoryHealthData = [
+const fallbackInventoryHealth = [
   { name: "Electronics", inStock: 245, lowStock: 12, outOfStock: 3 },
   { name: "Clothing", inStock: 189, lowStock: 8, outOfStock: 1 },
   { name: "Home & Garden", inStock: 156, lowStock: 15, outOfStock: 5 },
@@ -35,69 +37,158 @@ const inventoryHealthData = [
   { name: "Books", inStock: 234, lowStock: 4, outOfStock: 0 },
 ]
 
-const forecastData = [
+const fallbackForecast = [
   { product: "iPhone 15 Pro", current: 45, forecast: 12, risk: "High" },
   { product: "Samsung Galaxy S24", current: 8, forecast: 25, risk: "Critical" },
   { product: "MacBook Air M3", current: 23, forecast: 18, risk: "Medium" },
   { product: "AirPods Pro", current: 67, forecast: 45, risk: "Low" },
 ]
 
-const kpiData = [
-  {
-    title: "Orders Today",
-    value: "127",
-    change: "+12%",
-    trend: "up",
-    icon: ShoppingCart,
-    color: "text-chart-1",
-    sparkline: [45, 52, 48, 61, 67, 73, 89, 127],
-  },
-  {
-    title: "Deliveries",
-    value: "89",
-    change: "+8%",
-    trend: "up",
-    icon: Truck,
-    color: "text-chart-4",
-    sparkline: [34, 41, 38, 45, 52, 58, 67, 89],
-  },
-  {
-    title: "Sales Today",
-    value: "₦2.4M",
-    change: "+15%",
-    trend: "up",
-    icon: DollarSign,
-    color: "text-chart-2",
-    sparkline: [1.8, 2.1, 1.9, 2.3, 2.6, 2.8, 3.1, 2.4],
-  },
-  {
-    title: "Cashflow",
-    value: "₦890K",
-    change: "-3%",
-    trend: "down",
-    icon: TrendingUp,
-    color: "text-chart-3",
-    sparkline: [920, 945, 912, 889, 901, 887, 894, 890],
-  },
-  {
-    title: "Fraud Alerts",
-    value: "3",
-    change: "New",
-    trend: "alert",
-    icon: AlertTriangle,
-    color: "text-chart-5",
-    sparkline: [0, 1, 0, 2, 1, 0, 1, 3],
-  },
-  {
-    title: "Stock Alerts",
-    value: "12",
-    change: "Reorder",
-    trend: "alert",
-    icon: Package,
-    color: "text-chart-2",
-    sparkline: [8, 9, 11, 10, 13, 11, 14, 12],
-  },
-]
+// ─── KPI type ──────────────────────────────────────────────
+interface KPI {
+  title: string
+  value: string
+  change: string
+  trend: "up" | "down" | "alert"
+  icon: any
+  color: string
+  sparkline: number[]
+}
+
+// ─── Hook: fetch live dashboard data from backend ──────────
+function useDashboardData() {
+  const [kpis, setKpis] = useState<KPI[]>([])
+  const [salesTrend, setSalesTrend] = useState(fallbackSalesTrend)
+  const [inventoryHealth, setInventoryHealth] = useState(fallbackInventoryHealth)
+  const [forecastData, setForecastData] = useState(fallbackForecast)
+  const [loading, setLoading] = useState(true)
+  const [dataSource, setDataSource] = useState<"live" | "mock">("mock")
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      // Fetch orders, inventory, products, and debt summary in parallel
+      const [orders, inventory, products, debtSummary] = await Promise.allSettled([
+        getJSON<any[]>("/orders"),
+        getJSON<any[]>("/inventory"),
+        getJSON<any[]>("/products"),
+        getDebtSummary(),
+      ])
+
+      const ordersList = orders.status === "fulfilled" ? orders.value || [] : []
+      const inventoryList = inventory.status === "fulfilled" ? inventory.value || [] : []
+      const productsList = products.status === "fulfilled" ? products.value || [] : []
+      const debt = debtSummary.status === "fulfilled" ? debtSummary.value : null
+
+      // Compute KPIs from real data
+      const totalOrders = ordersList.length
+      const deliveredOrders = ordersList.filter((o: any) => o.status === "delivered" || o.status === "shipped").length
+      const totalSales = ordersList.reduce((sum: number, o: any) => sum + (Number(o.total) || 0), 0)
+      const lowStockCount = inventoryList.filter((i: any) => (i.on_hand || 0) < 20).length
+
+      const formatNGN = (val: number) => {
+        if (val >= 1_000_000) return `₦${(val / 1_000_000).toFixed(1)}M`
+        if (val >= 1_000) return `₦${(val / 1_000).toFixed(0)}K`
+        return `₦${val.toFixed(0)}`
+      }
+
+      const cashflow = debt
+        ? (debt.receivables_total || 0) - (debt.payables_total || 0)
+        : 0
+
+      const liveKpis: KPI[] = [
+        {
+          title: "Total Orders",
+          value: String(totalOrders),
+          change: totalOrders > 0 ? "Active" : "None",
+          trend: totalOrders > 0 ? "up" : "down",
+          icon: ShoppingCart,
+          color: "text-chart-1",
+          sparkline: [0, 0, 0, 0, 0, 0, 0, totalOrders],
+        },
+        {
+          title: "Deliveries",
+          value: String(deliveredOrders),
+          change: deliveredOrders > 0 ? `${Math.round((deliveredOrders / Math.max(totalOrders, 1)) * 100)}%` : "0%",
+          trend: deliveredOrders > 0 ? "up" : "down",
+          icon: Truck,
+          color: "text-chart-4",
+          sparkline: [0, 0, 0, 0, 0, 0, 0, deliveredOrders],
+        },
+        {
+          title: "Total Sales",
+          value: formatNGN(totalSales),
+          change: totalSales > 0 ? "Revenue" : "No sales",
+          trend: totalSales > 0 ? "up" : "down",
+          icon: DollarSign,
+          color: "text-chart-2",
+          sparkline: [0, 0, 0, 0, 0, 0, 0, totalSales],
+        },
+        {
+          title: "Cashflow",
+          value: formatNGN(Math.abs(cashflow)),
+          change: cashflow >= 0 ? "Positive" : "Negative",
+          trend: cashflow >= 0 ? "up" : "down",
+          icon: TrendingUp,
+          color: "text-chart-3",
+          sparkline: [0, 0, 0, 0, 0, 0, 0, Math.abs(cashflow)],
+        },
+        {
+          title: "Products",
+          value: String(productsList.length),
+          change: "Catalog",
+          trend: "up" as const,
+          icon: Package,
+          color: "text-chart-4",
+          sparkline: [0, 0, 0, 0, 0, 0, 0, productsList.length],
+        },
+        {
+          title: "Stock Alerts",
+          value: String(lowStockCount),
+          change: lowStockCount > 0 ? "Low stock" : "All good",
+          trend: lowStockCount > 0 ? "alert" : "up",
+          icon: AlertTriangle,
+          color: "text-chart-5",
+          sparkline: [0, 0, 0, 0, 0, 0, 0, lowStockCount],
+        },
+      ]
+
+      setKpis(liveKpis)
+
+      // Build inventory health from real data
+      if (inventoryList.length > 0 && productsList.length > 0) {
+        const productMap = new Map(productsList.map((p: any) => [p.id, p.name]))
+        const healthData = inventoryList.slice(0, 5).map((inv: any) => ({
+          name: productMap.get(inv.product_id) || `Product ${inv.product_id}`,
+          inStock: inv.on_hand || 0,
+          lowStock: (inv.on_hand || 0) < 20 ? inv.on_hand || 0 : 0,
+          outOfStock: (inv.on_hand || 0) === 0 ? 1 : 0,
+        }))
+        setInventoryHealth(healthData)
+      }
+
+      setDataSource("live")
+    } catch (err) {
+      console.error("Dashboard data fetch failed, using fallback:", err)
+      // Use fallback mock KPIs
+      setKpis([
+        { title: "Orders Today", value: "127", change: "+12%", trend: "up", icon: ShoppingCart, color: "text-chart-1", sparkline: [45, 52, 48, 61, 67, 73, 89, 127] },
+        { title: "Deliveries", value: "89", change: "+8%", trend: "up", icon: Truck, color: "text-chart-4", sparkline: [34, 41, 38, 45, 52, 58, 67, 89] },
+        { title: "Sales Today", value: "₦2.4M", change: "+15%", trend: "up", icon: DollarSign, color: "text-chart-2", sparkline: [1.8, 2.1, 1.9, 2.3, 2.6, 2.8, 3.1, 2.4] },
+        { title: "Cashflow", value: "₦890K", change: "-3%", trend: "down", icon: TrendingUp, color: "text-chart-3", sparkline: [920, 945, 912, 889, 901, 887, 894, 890] },
+        { title: "Fraud Alerts", value: "3", change: "New", trend: "alert", icon: AlertTriangle, color: "text-chart-5", sparkline: [0, 1, 0, 2, 1, 0, 1, 3] },
+        { title: "Stock Alerts", value: "12", change: "Reorder", trend: "alert", icon: Package, color: "text-chart-2", sparkline: [8, 9, 11, 10, 13, 11, 14, 12] },
+      ])
+      setDataSource("mock")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  return { kpis, salesTrend, inventoryHealth, forecastData, loading, dataSource, refresh: fetchData }
+}
 
 function Sparkline({ data, color }: { data: number[]; color: string }) {
   const max = Math.max(...data)
@@ -122,20 +213,16 @@ function Sparkline({ data, color }: { data: number[]; color: string }) {
 
 function Dashboard() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
-  const [isRealTime, setIsRealTime] = useState(true)
+  const { kpis, salesTrend, inventoryHealth, forecastData, loading, dataSource, refresh } = useDashboardData()
 
   useEffect(() => {
-    // Set initial time on client mount to avoid hydration mismatch
     setLastUpdate(new Date())
-    
-    if (!isRealTime) return
-
     const interval = setInterval(() => {
       setLastUpdate(new Date())
-    }, 30000) // Update every 30 seconds
-
+      refresh()
+    }, 30000)
     return () => clearInterval(interval)
-  }, [isRealTime])
+  }, [refresh])
 
   return (
     <div className="p-6 space-y-6">
@@ -150,8 +237,8 @@ function Dashboard() {
             <Activity className="h-4 w-4 text-chart-4" />
             <span>Last updated: {lastUpdate ? lastUpdate.toLocaleTimeString() : 'Loading...'}</span>
           </div>
-          <Badge variant="outline" className="bg-accent/10 text-accent-foreground border-accent">
-            Real-time updates
+          <Badge variant="outline" className={dataSource === "live" ? "bg-chart-4/10 text-chart-4 border-chart-4" : "bg-accent/10 text-accent-foreground border-accent"}>
+            {loading ? "Loading..." : dataSource === "live" ? "Live data" : "Demo data"}
           </Badge>
           <Link href="/">
             <Button size="sm" variant="outline">Back to Home</Button>
@@ -161,7 +248,7 @@ function Dashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {kpiData.map((kpi) => {
+        {kpis.map((kpi: KPI) => {
           const Icon = kpi.icon
           return (
             <Card key={kpi.title} className="relative overflow-hidden">
@@ -207,7 +294,7 @@ function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={salesTrendData}>
+              <AreaChart data={salesTrend}>
                 <defs>
                   <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
@@ -248,7 +335,7 @@ function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={inventoryHealthData} layout="horizontal">
+              <BarChart data={inventoryHealth} layout="horizontal">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
                 <YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" width={80} />

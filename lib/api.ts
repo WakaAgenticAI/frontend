@@ -1,20 +1,125 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000/api/v1";
 
-export async function postJSON<T>(path: string, body: any, init?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json", ...(init?.headers as any || {}) };
+// ─── Token Management ──────────────────────────────────────
+function getAccessToken(): string | null {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem("access_token") : null;
+  } catch { return null; }
+}
+
+function getRefreshToken(): string | null {
+  try {
+    return typeof window !== "undefined" ? window.localStorage.getItem("refresh_token") : null;
+  } catch { return null; }
+}
+
+function setTokens(access: string, refresh?: string) {
   try {
     if (typeof window !== "undefined") {
-      const token = window.localStorage.getItem("access_token");
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      window.localStorage.setItem("access_token", access);
+      if (refresh) window.localStorage.setItem("refresh_token", refresh);
     }
   } catch {}
-  const res = await fetch(`${API_BASE}${path}`, {
+}
+
+export function clearTokens() {
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("access_token");
+      window.localStorage.removeItem("refresh_token");
+    }
+  } catch {}
+}
+
+// ─── Input Sanitization ────────────────────────────────────
+function sanitizeString(input: string): string {
+  return input
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/javascript:/gi, "")
+    .replace(/on\w+\s*=/gi, "");
+}
+
+function sanitizeBody(body: any): any {
+  if (typeof body === "string") return sanitizeString(body);
+  if (Array.isArray(body)) return body.map(sanitizeBody);
+  if (body && typeof body === "object") {
+    const sanitized: any = {};
+    for (const [key, value] of Object.entries(body)) {
+      sanitized[sanitizeString(key)] = sanitizeBody(value);
+    }
+    return sanitized;
+  }
+  return body;
+}
+
+// ─── Auto Token Refresh ────────────────────────────────────
+let _refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefreshToken(): Promise<boolean> {
+  // Deduplicate concurrent refresh attempts
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) return false;
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.access_token) {
+        setTokens(data.access_token, data.refresh_token || refreshToken);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
+
+// ─── Core Fetch Helpers ────────────────────────────────────
+export async function postJSON<T>(path: string, body: any, init?: RequestInit): Promise<T> {
+  const sanitizedBody = sanitizeBody(body);
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...(init?.headers as any || {}) };
+  const token = getAccessToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers,
-    body: JSON.stringify(body),
+    body: JSON.stringify(sanitizedBody),
     ...init,
   });
+
+  // Auto-refresh on 401
+  if (res.status === 401 && !path.includes("/auth/")) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      const newToken = getAccessToken();
+      if (newToken) headers["Authorization"] = `Bearer ${newToken}`;
+      res = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(sanitizedBody),
+        ...init,
+      });
+    }
+  }
+
   if (!res.ok) {
+    if (res.status === 401) {
+      clearTokens();
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("auth:expired"));
+    }
     const txt = await res.text();
     throw new Error(`HTTP ${res.status}: ${txt}`);
   }
@@ -23,14 +128,26 @@ export async function postJSON<T>(path: string, body: any, init?: RequestInit): 
 
 export async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = { ...(init?.headers as any || {}) };
-  try {
-    if (typeof window !== "undefined") {
-      const token = window.localStorage.getItem("access_token");
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+  const token = getAccessToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res = await fetch(`${API_BASE}${path}`, { headers, ...init });
+
+  // Auto-refresh on 401
+  if (res.status === 401 && !path.includes("/auth/")) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      const newToken = getAccessToken();
+      if (newToken) headers["Authorization"] = `Bearer ${newToken}`;
+      res = await fetch(`${API_BASE}${path}`, { headers, ...init });
     }
-  } catch {}
-  const res = await fetch(`${API_BASE}${path}`, { headers, ...init });
+  }
+
   if (!res.ok) {
+    if (res.status === 401) {
+      clearTokens();
+      if (typeof window !== "undefined") window.dispatchEvent(new Event("auth:expired"));
+    }
     const txt = await res.text();
     throw new Error(`HTTP ${res.status}: ${txt}`);
   }

@@ -1,112 +1,221 @@
-# WakaAgent AI — Frontend (Next.js)
+# WakaAgent AI — Frontend
 
-A Next.js 15 app for WakaAgent AI: comprehensive business management with advanced AI-powered features including multilingual chat, voice transcription, intent classification, and real-time agent coordination.
+Next.js frontend for WakaAgent AI — an AI-powered distribution management system for Nigerian businesses. Features a modern dashboard, AI chat with multilingual support, order management, inventory tracking, and realtime updates.
 
-## Features
+---
 
-### 🔐 **Authentication & Security**
-- JWT-based authentication with automatic token management
-- Role-based access control (RBAC) for different user types
-- Secure API communication with Bearer token headers
+## Quick Start (for your deployment partner)
 
-### 🤖 **AI-Powered Features**
-- **Intelligent Chat Interface** — Real-time AI conversations with context awareness
-- **Voice Transcription** — Record and transcribe audio messages using Whisper
-- **Multilingual Support** — Nigerian languages (Pidgin, Hausa, Yoruba, Igbo)
-- **Intent Classification** — Automatic routing of user requests to appropriate AI agents
-- **Streaming Responses** — Real-time AI response streaming for better UX
-- **RAG Integration** — Enhanced responses with knowledge base context
+```bash
+# 1. Enter the frontend directory
+cd WakaAgentAI/frontend
 
-### 📊 **Business Management**
-- **Orders Management** — Create, track, and fulfill orders with AI assistance
-- **Inventory Control** — Stock management with AI-powered forecasting
-- **CRM System** — Customer relationship management with AI insights
-- **Financial Tools** — Fraud detection and financial reporting
-- **Reports & Analytics** — Comprehensive business intelligence
+# 2. Create environment file
+cat > .env.local << EOF
+NEXT_PUBLIC_BACKEND_BASE=http://localhost:8000
+NEXT_PUBLIC_API_BASE=http://localhost:8000/api/v1
+EOF
 
-### 🔄 **Real-time Features**
-- **Live Updates** — Socket.IO integration for real-time notifications
-- **Collaborative Interface** — Multi-user support with live data synchronization
-- **AI Agent Coordination** — Seamless interaction between different AI agents
+# 3. Install dependencies
+npm install --legacy-peer-deps
+
+# 4. Start dev server
+npm run dev
+```
+
+**App running at**: http://localhost:3000
+
+**Login**: `admin@example.com` / `admin123` (seeded by backend on first startup)
+
+> **Important**: The backend must be running first. See `backend/README.md`.
+
+---
 
 ## Prerequisites
 
-- Node 18+
-- Backend API running (FastAPI). See `backend/README.md`.
+| Tool | Version | Notes |
+|------|---------|-------|
+| Node.js | 18+ | [nodejs.org](https://nodejs.org) |
+| npm | 9+ | Comes with Node.js |
+| Backend API | Running | Must be accessible at the URL in `.env.local` |
 
-## Local Development
+---
 
-1. Create `.env.local`:
-   ```bash
-   NEXT_PUBLIC_API_BASE=http://127.0.0.1:8000/api/v1
-   ```
-   Adjust port to match your backend (e.g., `8002`).
+## Environment Variables
 
-2. Install deps and run:
-   ```bash
-   npm i --legacy-peer-deps
-   npm run dev
-   # App on http://localhost:3000
-   ```
+Create `frontend/.env.local`:
 
-## Environment
+| Variable | Required | Example | Description |
+|----------|----------|---------|-------------|
+| `NEXT_PUBLIC_BACKEND_BASE` | **Yes** | `http://localhost:8000` | Backend base URL (used for Socket.IO) |
+| `NEXT_PUBLIC_API_BASE` | **Yes** | `http://localhost:8000/api/v1` | Full API base URL |
+| `NEXT_PUBLIC_DEMO_BEARER` | No | `eyJhbGci...` | Optional fixed bearer token for demos |
+| `NEXT_PUBLIC_AI_ENABLED` | No | `true` | Enable/disable AI features (default: true) |
+| `NEXT_PUBLIC_MULTILINGUAL_ENABLED` | No | `true` | Enable/disable multilingual support (default: true) |
 
-### Required Variables
-- `NEXT_PUBLIC_API_BASE` (required): full API base including `/api/v1`.
-  - Example: `https://api.yourdomain.com/api/v1`.
-  - The WebSocket URL is derived from `NEXT_PUBLIC_API_BASE` origin automatically (e.g., `wss://api.yourdomain.com/ws`).
+---
 
-### Optional Variables
-- `NEXT_PUBLIC_DEMO_BEARER` — Optional bearer token for demo-only persistence
-- `NEXT_PUBLIC_AI_ENABLED` — Enable/disable AI features (default: true)
-- `NEXT_PUBLIC_MULTILINGUAL_ENABLED` — Enable/disable multilingual support (default: true)
+## Deploy to Netlify
 
-## Production (Vercel)
+A `netlify.toml` is included for easy deployment.
 
-- Set Environment Variables in Vercel → Project → Settings:
-  ```
-  NEXT_PUBLIC_API_BASE=https://api.yourdomain.com/api/v1
-  NEXT_PUBLIC_AI_ENABLED=true
-  NEXT_PUBLIC_MULTILINGUAL_ENABLED=true
-  ```
-- Re-deploy after changing env vars.
-- Ensure your backend CORS allows your Vercel domain and your proxy supports WebSocket upgrades to `/ws`.
-- For AI features to work, ensure your backend has proper API keys configured (GROQ_API_KEY, etc.).
+### Step-by-Step
 
-## Reports Downloads
+1. Push the repo to GitHub
+2. Go to [Netlify](https://app.netlify.com) → **Add new site** → **Import from Git**
+3. Connect your GitHub repo
+4. Configure build settings:
 
-- Backend must expose generated files via public URLs.
-- Recommended: mount static at `/reports-files/` that serves `REPORTS_EXPORT_DIR`, and include `download_url` in `GET /admin/reports/*/latest` responses.
-- The Reports tab will open `download_url` in a new tab when present.
+| Setting | Value |
+|---------|-------|
+| **Base directory** | `frontend` |
+| **Build command** | `npm run build` |
+| **Publish directory** | `frontend/.next` |
 
-## AI Features Usage
+5. Set environment variables in Netlify → **Site settings** → **Environment variables**:
 
-### Chat Interface
-- **Voice Messages**: Click the microphone icon to record audio messages
-- **Language Selection**: Use the language selector for multilingual conversations
-- **Intent Classification**: The system automatically routes your messages to appropriate AI agents
-- **Streaming Responses**: AI responses appear in real-time as they're generated
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_BACKEND_BASE` | Your Render backend URL (e.g. `https://wakaagent-backend.onrender.com`) |
+| `NEXT_PUBLIC_API_BASE` | `https://wakaagent-backend.onrender.com/api/v1` |
 
-### Supported Languages
-- **English** (default)
-- **Nigerian Pidgin** — "How far, wetin dey happen?"
-- **Hausa** — "Ina kwana, yaya aiki?"
-- **Yoruba** — "Bawo ni, se alafia ni?"
-- **Igbo** — "Kedu ka ị mere, ọ dị mma?"
+6. Click **Deploy site**
 
-### AI Agents
-- **Orders Agent** — Handles order creation, tracking, and fulfillment
-- **Inventory Agent** — Manages stock levels and provides inventory insights
-- **CRM Agent** — Customer relationship management and support
-- **Forecasting Agent** — Demand prediction and reorder recommendations
-- **Fraud Detection Agent** — Transaction security and fraud prevention
+### After Deploying
 
-## Notes
+**Update backend CORS**: Go to your Render backend service → **Environment** → add your Netlify URL to `CORS_ORIGINS`:
 
-- If you change `NEXT_PUBLIC_API_BASE`, rebuild and redeploy.
-- We do not send cookies; CORS can keep `allow_credentials` off when using Bearer tokens.
-- AI features require a properly configured backend with API keys.
-- Voice transcription requires microphone permissions in your browser.
+```
+CORS_ORIGINS=https://your-app.netlify.app
+```
+
+Then redeploy the backend for the change to take effect.
+
+---
+
+## Features
+
+### Pages
+
+| Page | Path | Description |
+|------|------|-------------|
+| Landing | `/` | Public landing page |
+| Dashboard | `/dashboard` | KPI cards, charts, business overview |
+| Chat | `/chat` | AI chat with language selector & voice |
+| Orders | `/orders` | Order list + creation wizard |
+| CRM | `/crm` | Customer management |
+| Inventory | `/inventory` | Stock levels & warehouse management |
+| Finance | `/finance` | Debts, payments, fraud alerts |
+| Support | `/support` | Help & support tickets |
+| Admin | `/admin` | User management, roles, reports |
+| Settings | `/settings` | App configuration |
+
+### AI Chat Features
+
+- **Multilingual**: English, Nigerian Pidgin, Hausa, Yoruba, Igbo
+- **Voice Input**: Click microphone icon to record audio messages
+- **Streaming**: AI responses appear in real-time
+- **7 AI Agents**: Orders, Inventory, CRM, Forecasting, Fraud Detection, Finance — auto-routed by intent
+
+### Realtime
+
+- Socket.IO connects to backend at `/ws` path
+- Namespaces: `/chat` (messages), `/orders` (order updates)
+- Auto-reconnects on connection loss
+
+---
+
+## Tech Stack
+
+| Technology | Purpose |
+|------------|---------|
+| Next.js 16 | React framework (App Router) |
+| React 18 | UI library |
+| TypeScript | Type safety |
+| TailwindCSS v4 | Styling |
+| shadcn/ui (Radix) | Component library |
+| Recharts | Dashboard charts |
+| Lucide | Icons |
+| Socket.IO Client | Realtime communication |
+| Zod | Schema validation |
+
+---
+
+## Testing
+
+```bash
+# Run tests
+npm test
+
+# Run with coverage
+npm run test:coverage
+```
+
+Tests use **Jest** + **React Testing Library**.
+
+---
+
+## Project Structure
+
+```
+frontend/
+├── app/                    # Next.js App Router pages
+│   ├── page.tsx            # Landing page
+│   ├── dashboard/          # Dashboard with KPI cards
+│   ├── chat/               # AI chat interface
+│   ├── orders/             # Order management
+│   ├── crm/                # Customer management
+│   ├── inventory/          # Stock management
+│   ├── finance/            # Financial tools
+│   ├── support/            # Support tickets
+│   ├── admin/              # Admin panel
+│   └── settings/           # App settings
+├── components/             # React components
+│   ├── chat/               # Chat interface, message bubbles
+│   ├── orders/             # Order wizard, order list
+│   ├── ui/                 # shadcn/ui base components
+│   └── ...                 # Dashboard, CRM, inventory components
+├── lib/                    # Utilities
+│   ├── api.ts              # API helpers (auto-attaches JWT from localStorage)
+│   ├── realtime.ts         # Socket.IO client helper
+│   └── utils.ts            # General utilities
+├── hooks/                  # Custom React hooks
+├── styles/                 # Global styles
+├── __tests__/              # Jest test files
+├── package.json            # Dependencies
+├── netlify.toml            # Netlify deployment config
+├── jest.config.js          # Jest configuration
+├── tsconfig.json           # TypeScript config
+└── next.config.mjs         # Next.js config
+```
+
+---
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `lib/api.ts` | `postJSON`/`getJSON` helpers — auto-attaches JWT from `localStorage` |
+| `lib/realtime.ts` | Socket.IO client — connects to `/chat` namespace at `/ws` path |
+| `components/chat/chat-interface.tsx` | Main chat UI with language selector & voice |
+| `components/orders/order-wizard.tsx` | Step-by-step order creation |
+| `netlify.toml` | Netlify build & plugin config |
+
+---
+
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| **npm install fails** | Use `npm install --legacy-peer-deps` |
+| **API calls return 401** | Login first — JWT is stored in `localStorage.access_token` |
+| **API calls return 404** | Check `NEXT_PUBLIC_API_BASE` points to running backend |
+| **Socket.IO not connecting** | Verify `NEXT_PUBLIC_BACKEND_BASE` and backend CORS includes your frontend URL |
+| **Blank page after deploy** | Ensure env vars are set in Netlify and site is redeployed |
+| **Chat not working** | Backend needs `GROQ_API_KEY` set for AI features |
+| **Voice not working** | Browser needs microphone permission; Whisper service must be running on backend |
+
+---
 
 ## License
 

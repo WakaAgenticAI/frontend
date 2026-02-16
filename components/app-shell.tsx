@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 import Dashboard from "@/components/dashboard"
+import { ErrorBoundary } from "@/components/error-boundary"
 import { ChatInterface } from "@/components/chat/chat-interface"
 import { OrdersInterface } from "@/components/orders/orders-interface"
 import { CRMInterface } from "@/components/crm/crm-interface"
@@ -51,9 +52,10 @@ interface AppShellProps {
   children?: React.ReactNode
   currentView?: string
   onViewChange?: (view: string) => void
+  onLogout?: () => void
 }
 
-export function AppShell({ children, currentView = "dashboard", onViewChange }: AppShellProps) {
+export function AppShell({ children, currentView = "dashboard", onViewChange, onLogout }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [collapsed, setCollapsed] = useState<boolean>(false)
 
@@ -74,30 +76,34 @@ export function AppShell({ children, currentView = "dashboard", onViewChange }: 
   }
 
   const renderCurrentView = () => {
-    if (children) return children
+    if (children) return <ErrorBoundary>{children}</ErrorBoundary>
 
-    switch (currentView) {
-      case "dashboard":
-        return <Dashboard />
-      case "chat":
-        return <ChatInterface />
-      case "orders":
-        return <OrdersInterface />
-      case "crm":
-        return <CRMInterface />
-      case "inventory":
-        return <InventoryInterface />
-      case "finance":
-        return <FinanceInterface />
-      case "support":
-        return <SupportInterface />
-      case "settings":
-        return <SettingsInterface />
-      case "admin":
-        return <AdminInterface />
-      default:
-        return <Dashboard />
-    }
+    const view = (() => {
+      switch (currentView) {
+        case "dashboard":
+          return <Dashboard />
+        case "chat":
+          return <ChatInterface />
+        case "orders":
+          return <OrdersInterface />
+        case "crm":
+          return <CRMInterface />
+        case "inventory":
+          return <InventoryInterface />
+        case "finance":
+          return <FinanceInterface />
+        case "support":
+          return <SupportInterface />
+        case "settings":
+          return <SettingsInterface />
+        case "admin":
+          return <AdminInterface />
+        default:
+          return <Dashboard />
+      }
+    })()
+
+    return <ErrorBoundary key={currentView}>{view}</ErrorBoundary>
   }
 
   return (
@@ -210,7 +216,7 @@ export function AppShell({ children, currentView = "dashboard", onViewChange }: 
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => onViewChange?.("dashboard")}>Profile</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onViewChange?.("settings")}>Settings</DropdownMenuItem>
-                <DropdownMenuItem>Sign out</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onLogout?.()}>Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
